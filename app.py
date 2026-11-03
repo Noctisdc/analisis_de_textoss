@@ -1,14 +1,4 @@
-import streamlit as st
-import pandas as pd
-from textblob import TextBlob
-import re
-from googletrans import Translator
 
-# Configuración de la página
-st.set_page_config(
-    page_title="Analizador de Texto Simple",
-    page_icon="📊",
-    layout="wide"
 )
 
 # Título y descripción
