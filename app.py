@@ -1,258 +1,223 @@
+import re
+import time
+import pandas as pd
+import streamlit as st
+from textblob import TextBlob
+from deep_translator import GoogleTranslator
 
-)
+st.set_page_config(page_title="Detective de textos", layout="centered")
 
-# Título y descripción
-st.title("📝 Analizador de Texto con TextBlob")
 st.markdown("""
-Esta aplicación utiliza TextBlob para realizar un análisis básico de texto:
-- Análisis de sentimiento y subjetividad
-- Extracción de palabras clave
-- Análisis de frecuencia de palabras
-""")
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Special+Elite&display=swap');
+.stApp {
+    background-color: #efe6d2;
+}
+[data-testid="stHeader"] {
+    background: transparent;
+}
+section[data-testid="stSidebar"] {
+    background-color: #ddd0b3;
+}
+.stApp, .stApp p, .stApp label, .stApp li, .stApp h1, .stApp h2, .stApp h3 {
+    color: #2b2b2b;
+}
+[data-testid="stMetricValue"], [data-testid="stMetricLabel"] {
+    color: #2b2b2b !important;
+}
+h1, h2, h3 {
+    font-family: 'Special Elite', cursive;
+}
+textarea {
+    background-color: #fffaf0 !important;
+    color: #2b2b2b !important;
+}
+div.stButton > button {
+    background-color: #2b2b2b;
+    color: #efe6d2 !important;
+    border-radius: 4px;
+    border: none;
+    padding: 8px 24px;
+    font-family: 'Special Elite', cursive;
+}
+div.stButton > button:hover {
+    background-color: #b3261e;
+}
+.sello {
+    display: inline-block;
+    border: 4px solid #b3261e;
+    color: #b3261e !important;
+    font-family: 'Special Elite', cursive;
+    font-size: 30px;
+    padding: 4px 16px;
+    transform: rotate(-4deg);
+    margin: 10px 0;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# Barra lateral
-st.sidebar.title("Opciones")
-modo = st.sidebar.selectbox(
-    "Selecciona el modo de entrada:",
-    ["Texto directo", "Archivo de texto"]
-)
+vacias = set("""a al algo ante con como cual cuando de del desde donde el ella ellos en entre era es esa ese eso esta este esto
+fue ha han hay la las le les lo los me mi mis muy nada ni no nos o otra otro para pero por porque que quien se si sin sobre
+son su sus también te tiene tu un una uno unos y ya yo the an and are as at be but by for from had has have he her his i if
+in is it its my of on or our she so that their them they this to was we were what with you your""".split())
 
-# Función para contar palabras sin depender de NLTK
-def contar_palabras(texto):
-    # Lista básica de palabras vacías en español e inglés
-    stop_words = set([
-        "a", "al", "algo", "algunas", "algunos", "ante", "antes", "como", "con", "contra",
-        "cual", "cuando", "de", "del", "desde", "donde", "durante", "e", "el", "ella",
-        "ellas", "ellos", "en", "entre", "era", "eras", "es", "esa", "esas", "ese",
-        "eso", "esos", "esta", "estas", "este", "esto", "estos", "ha", "había", "han",
-        "has", "hasta", "he", "la", "las", "le", "les", "lo", "los", "me", "mi", "mía",
-        "mías", "mío", "míos", "mis", "mucho", "muchos", "muy", "nada", "ni", "no", "nos",
-        "nosotras", "nosotros", "nuestra", "nuestras", "nuestro", "nuestros", "o", "os", 
-        "otra", "otras", "otro", "otros", "para", "pero", "poco", "por", "porque", "que", 
-        "quien", "quienes", "qué", "se", "sea", "sean", "según", "si", "sido", "sin", 
-        "sobre", "sois", "somos", "son", "soy", "su", "sus", "suya", "suyas", "suyo", 
-        "suyos", "también", "tanto", "te", "tenéis", "tenemos", "tener", "tengo", "ti", 
-        "tiene", "tienen", "todo", "todos", "tu", "tus", "tuya", "tuyas", "tuyo", "tuyos", 
-        "tú", "un", "una", "uno", "unos", "vosotras", "vosotros", "vuestra", "vuestras", 
-        "vuestro", "vuestros", "y", "ya", "yo",
-        # Inglés
-        "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", 
-        "any", "are", "aren't", "as", "at", "be", "because", "been", "before", "being", 
-        "below", "between", "both", "but", "by", "can't", "cannot", "could", "couldn't", 
-        "did", "didn't", "do", "does", "doesn't", "doing", "don't", "down", "during", 
-        "each", "few", "for", "from", "further", "had", "hadn't", "has", "hasn't", "have", 
-        "haven't", "having", "he", "he'd", "he'll", "he's", "her", "here", "here's", 
-        "hers", "herself", "him", "himself", "his", "how", "how's", "i", "i'd", "i'll", 
-        "i'm", "i've", "if", "in", "into", "is", "isn't", "it", "it's", "its", "itself", 
-        "let's", "me", "more", "most", "mustn't", "my", "myself", "no", "nor", "not", 
-        "of", "off", "on", "once", "only", "or", "other", "ought", "our", "ours", 
-        "ourselves", "out", "over", "own", "same", "shan't", "she", "she'd", "she'll", 
-        "she's", "should", "shouldn't", "so", "some", "such", "than", "that", "that's", 
-        "the", "their", "theirs", "them", "themselves", "then", "there", "there's", 
-        "these", "they", "they'd", "they'll", "they're", "they've", "this", "those", 
-        "through", "to", "too", "under", "until", "up", "very", "was", "wasn't", "we", 
-        "we'd", "we'll", "we're", "we've", "were",         "weren't", "what", "what's", "when", 
-        "when's", "where", "where's", "which", "while", "who", "who's", "whom", "why", 
-        "why's", "with", "would", "wouldn't", "you", "you'd", "you'll", "you're", "you've",
-        "your", "yours", "yourself", "yourselves"
-    ])
-    
-    # Limpiar y tokenizar texto
-    palabras = re.findall(r'\b\w+\b', texto.lower())
-    
-    # Filtrar palabras vacías y contar frecuencias
-    palabras_filtradas = [palabra for palabra in palabras 
-                         if palabra not in stop_words and len(palabra) > 2]
-    
-    # Contar frecuencias
-    contador = {}
-    for palabra in palabras_filtradas:
-        contador[palabra] = contador.get(palabra, 0) + 1
-    
-    # Ordenar por frecuencia
-    contador_ordenado = dict(sorted(contador.items(), key=lambda x: x[1], reverse=True))
-    
-    return contador_ordenado, palabras_filtradas
+ejemplos = {
+    "Escribir el mío": "",
+    "Reseña de un viaje": "El viaje a Japón fue increíble. Los templos de Kyoto son hermosos y la gente fue muy amable. La comida estuvo deliciosa en cada ciudad. Volvería mañana mismo.",
+    "Queja de un cliente": "El pedido llegó tarde y la caja estaba rota. Nadie respondió mis mensajes. El servicio fue pésimo y estoy muy decepcionado. No pienso volver a comprar aquí.",
+    "Noticia neutra": "La empresa abrirá una nueva sede el próximo mes. El edificio tiene tres pisos. Se contratará a cincuenta personas.",
+}
 
-# Inicializar el traductor
-translator = Translator()
 
-# Función para traducir texto del español al inglés
-def traducir_texto(texto):
-    try:
-        traduccion = translator.translate(texto, src='es', dest='en')
-        return traduccion.text
-    except Exception as e:
-        st.error(f"Error al traducir: {e}")
-        return texto  # Devolver el texto original si falla la traducción
+@st.cache_data(show_spinner=False)
+def traducir_frases(frases):
+    salida = []
+    fallos = 0
+    for f in frases:
+        traducida = f
+        exito = False
+        for intento in range(3):
+            try:
+                traducida = GoogleTranslator(source="auto", target="en").translate(f)
+                exito = True
+                break
+            except Exception:
+                time.sleep(1.5)
+        if not exito:
+            fallos += 1
+        salida.append(traducida)
+        time.sleep(0.25)
+    return salida, fallos
 
-# Función para procesar el texto con TextBlob (versión con traducción)
-def procesar_texto(texto):
-    # Guardar el texto original
-    texto_original = texto
-    
-    # Traducir el texto al inglés para mejor análisis
-    texto_ingles = traducir_texto(texto)
-    
-    # Analizar el texto traducido con TextBlob
-    blob = TextBlob(texto_ingles)
-    
-    # Análisis de sentimiento (esto no requiere corpus adicionales)
-    sentimiento = blob.sentiment.polarity
-    subjetividad = blob.sentiment.subjectivity
-    
-    # Extraer frases de manera simplificada (del texto original)
-    frases_originales = [frase.strip() for frase in re.split(r'[.!?]+', texto_original) if frase.strip()]
-    
-    # Extraer frases del texto traducido
-    frases_traducidas = [frase.strip() for frase in re.split(r'[.!?]+', texto_ingles) if frase.strip()]
-    
-    # Combinar frases originales y traducidas
-    frases_combinadas = []
-    for i in range(min(len(frases_originales), len(frases_traducidas))):
-        frases_combinadas.append({
-            "original": frases_originales[i],
-            "traducido": frases_traducidas[i]
-        })
-    
-    # Contar palabras con nuestra función simplificada (en el texto traducido)
-    contador_palabras, palabras = contar_palabras(texto_ingles)
-    
+
+def humor(p):
+    if p > 0.25:
+        return "POSITIVO", "El texto respira entusiasmo. Todo apunta a un ánimo alegre."
+    if p > 0.05:
+        return "ALGO POSITIVO", "Hay buen ánimo, aunque sin exagerar."
+    if p < -0.25:
+        return "NEGATIVO", "El texto está cargado de queja o tristeza. El ánimo es sombrío."
+    if p < -0.05:
+        return "ALGO NEGATIVO", "Hay cierto malestar entre líneas."
+    return "NEUTRAL", "El texto no se inclina hacia ningún lado. Informa sin mostrar emociones."
+
+
+def analizar(texto, limite):
+    frases = [f.strip() for f in re.split(r"[.!?\n]+", texto) if f.strip()][:limite]
+    if len(frases) == 0:
+        return None
+    traducidas, fallos = traducir_frases(tuple(frases))
+    polaridades = [TextBlob(t).sentiment.polarity for t in traducidas]
+    general = TextBlob(" ".join(traducidas)).sentiment
+    palabras = re.findall(r"\b\w+\b", texto.lower())
+    claves = [p for p in palabras if p not in vacias and len(p) > 2]
     return {
-        "sentimiento": sentimiento,
-        "subjetividad": subjetividad,
-        "frases": frases_combinadas,
-        "contador_palabras": contador_palabras,
+        "frases": frases,
+        "polaridades": polaridades,
+        "sentimiento": general.polarity,
+        "subjetividad": general.subjectivity,
         "palabras": palabras,
-        "texto_original": texto_original,
-        "texto_traducido": texto_ingles
+        "claves": claves,
+        "fallos": fallos,
     }
 
-# Función para crear visualizaciones usando componentes nativos de Streamlit
-def crear_visualizaciones(resultados):
-    col1, col2 = st.columns(2)
-    
-    # Visualización de sentimiento y subjetividad con barras de progreso de Streamlit
-    with col1:
-        st.subheader("Análisis de Sentimiento y Subjetividad")
-        
-        # Normalizar valores para mostrarlos en barras de progreso
-        # Sentimiento va de -1 a 1, lo normalizamos a 0-1 para la barra
-        sentimiento_norm = (resultados["sentimiento"] + 1) / 2
-        
-        st.write("**Sentimiento:**")
-        st.progress(sentimiento_norm)
-        
-        if resultados["sentimiento"] > 0.05:
-            st.success(f"📈 Positivo ({resultados['sentimiento']:.2f})")
-        elif resultados["sentimiento"] < -0.05:
-            st.error(f"📉 Negativo ({resultados['sentimiento']:.2f})")
-        else:
-            st.info(f"📊 Neutral ({resultados['sentimiento']:.2f})")
-        
-        # Subjetividad ya está en el rango 0-1
-        st.write("**Subjetividad:**")
-        st.progress(resultados["subjetividad"])
-        
-        if resultados["subjetividad"] > 0.5:
-            st.warning(f"💭 Alta subjetividad ({resultados['subjetividad']:.2f})")
-        else:
-            st.info(f"📋 Baja subjetividad ({resultados['subjetividad']:.2f})")
-    
-    # Palabras más frecuentes usando chart de Streamlit
-    with col2:
-        st.subheader("Palabras más frecuentes")
-        if resultados["contador_palabras"]:
-            palabras_top = dict(list(resultados["contador_palabras"].items())[:10])
-            st.bar_chart(palabras_top)
-    
-    # Mostrar texto traducido
-    st.subheader("Texto Traducido")
-    with st.expander("Ver traducción completa"):
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**Texto Original (Español):**")
-            st.text(resultados["texto_original"])
-        with col2:
-            st.markdown("**Texto Traducido (Inglés):**")
-            st.text(resultados["texto_traducido"])
-    
-    # Análisis de frases
-    st.subheader("Frases detectadas")
-    if resultados["frases"]:
-        for i, frase_dict in enumerate(resultados["frases"][:10], 1):
-            frase_original = frase_dict["original"]
-            frase_traducida = frase_dict["traducido"]
-            
-            try:
-                blob_frase = TextBlob(frase_traducida)
-                sentimiento = blob_frase.sentiment.polarity
-                
-                if sentimiento > 0.05:
-                    emoji = "😊"
-                elif sentimiento < -0.05:
-                    emoji = "😟"
-                else:
-                    emoji = "😐"
-                
-                st.write(f"{i}. {emoji} **Original:** *\"{frase_original}\"*")
-                st.write(f"   **Traducción:** *\"{frase_traducida}\"* (Sentimiento: {sentimiento:.2f})")
-                st.write("---")
-            except:
-                st.write(f"{i}. **Original:** *\"{frase_original}\"*")
-                st.write(f"   **Traducción:** *\"{frase_traducida}\"*")
-                st.write("---")
-    else:
-        st.write("No se detectaron frases.")
 
-# Lógica principal según el modo seleccionado
-if modo == "Texto directo":
-    st.subheader("Ingresa tu texto para analizar")
-    texto = st.text_area("", height=200, placeholder="Escribe o pega aquí el texto que deseas analizar...")
-    
-    if st.button("Analizar texto"):
-        if texto.strip():
-            with st.spinner("Analizando texto..."):
-                resultados = procesar_texto(texto)
-                crear_visualizaciones(resultados)
-        else:
-            st.warning("Por favor, ingresa algún texto para analizar.")
+with st.sidebar:
+    st.subheader("Agencia de detectives")
+    st.write("Entrega una pista escrita y el detective te devuelve su informe: ánimo, opinión, palabras sospechosas y frases clave.")
+    entrada = st.radio("¿Cómo entregas la pista?", ["Escribir o pegar", "Subir archivo"])
+    limite = st.slider("Frases a investigar", 3, 20, 10)
+    st.caption("Cada frase se traduce al inglés para poder analizarla, así que más frases tardan más.")
 
-elif modo == "Archivo de texto":
-    st.subheader("Carga un archivo de texto")
-    archivo = st.file_uploader("", type=["txt", "csv", "md"])
-    
+st.title("🕵️ Detective de textos")
+st.write("Un texto llega a la oficina y nadie sabe qué siente. El detective lo va a descubrir.")
+
+texto = ""
+
+if entrada == "Escribir o pegar":
+    caso = st.selectbox("Elige un caso", list(ejemplos.keys()))
+    texto = st.text_area("Pista (el texto a investigar)", value=ejemplos[caso], height=180, key=f"txt_{caso}")
+else:
+    archivo = st.file_uploader("Sube la pista", type=["txt", "md", "csv"])
     if archivo is not None:
-        try:
-            contenido = archivo.getvalue().decode("utf-8")
-            with st.expander("Ver contenido del archivo"):
-                st.text(contenido[:1000] + ("..." if len(contenido) > 1000 else ""))
-            
-            if st.button("Analizar archivo"):
-                with st.spinner("Analizando archivo..."):
-                    resultados = procesar_texto(contenido)
-                    crear_visualizaciones(resultados)
-        except Exception as e:
-            st.error(f"Error al procesar el archivo: {e}")
+        texto = archivo.getvalue().decode("utf-8", errors="ignore")
+        with st.expander("Ver la pista"):
+            st.text(texto[:1000])
 
-# Información adicional
-with st.expander("📚 Información sobre el análisis"):
-    st.markdown("""
-    ### Sobre el análisis de texto
-    
-    - **Sentimiento**: Varía de -1 (muy negativo) a 1 (muy positivo)
-    - **Subjetividad**: Varía de 0 (muy objetivo) a 1 (muy subjetivo)
-    
-    ### Requisitos mínimos
-    
-    Esta aplicación utiliza únicamente:
-    ```
-    streamlit
-    textblob
-    pandas
-    ```
-    """)
+if st.button("Abrir el caso"):
+    if texto.strip() == "":
+        st.warning("El detective necesita una pista. Escribe o sube un texto.")
+    else:
+        with st.spinner("El detective está investigando..."):
+            resultado = analizar(texto[:3000], limite)
+        if resultado is None:
+            st.warning("No encontré frases en ese texto.")
+        else:
+            st.session_state.informe = resultado
 
-# Pie de página
-st.markdown("---")
-st.markdown("Desarrollado con ❤️ usando Streamlit y TextBlob")
+inf = st.session_state.get("informe")
+
+if inf:
+    st.divider()
+    etiqueta, frase_veredicto = humor(inf["sentimiento"])
+
+    st.header("Informe del caso")
+    st.markdown(f'<div class="sello">{etiqueta}</div>', unsafe_allow_html=True)
+    st.write(frase_veredicto)
+
+    if inf["fallos"] > 0:
+        st.warning(f"No pude traducir {inf['fallos']} frase(s), así que el resultado puede ser menos preciso. Intenta de nuevo en un minuto.")
+
+    st.write("**Ánimo del texto**")
+    st.progress((inf["sentimiento"] + 1) / 2)
+
+    st.write("**Opinión frente a hechos**")
+    st.progress(inf["subjetividad"])
+    if inf["subjetividad"] > 0.5:
+        st.write("El testigo opina más de lo que informa.")
+    else:
+        st.write("El testigo se ciñe a los hechos.")
+
+    total = len(inf["palabras"])
+    unicas = len(set(inf["palabras"]))
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Palabras", total)
+    c2.metric("Frases", len(inf["frases"]))
+    c3.metric("Únicas", unicas)
+    c4.metric("Riqueza", f"{unicas / total:.0%}" if total else "0%")
+
+    st.subheader("Línea de tiempo emocional")
+    st.line_chart(pd.DataFrame({"Ánimo": inf["polaridades"]}, index=range(1, len(inf["polaridades"]) + 1)))
+    st.caption("Cada punto es una frase. Arriba es positivo y abajo es negativo.")
+
+    st.subheader("Palabras sospechosas")
+    lista_palabras = ""
+    if inf["claves"]:
+        top = pd.Series(inf["claves"]).value_counts().head(10)
+        st.bar_chart(top)
+        lista_palabras = "\n".join(f"- {p}: {n}" for p, n in top.items())
+    else:
+        st.write("No hay palabras clave en este texto.")
+
+    pol = inf["polaridades"]
+    mejor = pol.index(max(pol))
+    peor = pol.index(min(pol))
+    st.subheader("Frases clave")
+    st.write(f"**La más positiva** ({pol[mejor]:.2f}): {inf['frases'][mejor]}")
+    st.write(f"**La más negativa** ({pol[peor]:.2f}): {inf['frases'][peor]}")
+
+    informe_txt = (
+        f"INFORME DEL CASO\n\n"
+        f"Veredicto: {etiqueta}\n"
+        f"Ánimo: {inf['sentimiento']:.2f}\n"
+        f"Subjetividad: {inf['subjetividad']:.2f}\n"
+        f"Palabras: {total}\n"
+        f"Frases: {len(inf['frases'])}\n\n"
+        f"Palabras sospechosas:\n{lista_palabras}\n"
+    )
+    st.download_button("Descargar informe", informe_txt, file_name="informe.txt")
+
+with st.expander("¿Cómo trabaja el detective?"):
+    st.write("**Ánimo:** va de -1 (muy negativo) a 1 (muy positivo).")
+    st.write("**Subjetividad:** va de 0 (solo hechos) a 1 (pura opinión).")
+    st.write("**Riqueza:** porcentaje de palabras distintas sobre el total. Más alto significa vocabulario más variado.")
